@@ -2,144 +2,129 @@ import tensorflow as tf
 import sys
 import os
 sys.path.insert(0,os.path.dirname(os.getcwd()))
-import layer.layers as layers
-import config.template as template
+from dataprocessing.utils import *
+from config.nn_graph import *
+from layer.layers import *
 import numpy as np
-#DNN = layers.DNN
-class mnist(template.TFgraph):
+import datetime
 
-    def __init__(self):        
+class mnist(nn_graph):
 
-        super(mnist,self).__init__()
-        self.weights = {}
-        self.biases = {}
-        self.name = 'mnist'
-        
+    def __init__(self,mnist_name='mnist'):
+        super(mnist,self).__init__(mnist_name)
+        # tunable hyperparameters for nn architecture
+        self.s_f_conv1 = 3; # filter size of first convolution layer (default = 3)
+        self.n_f_conv1 = 36; # number of features of first convolution layer (default = 36)
+        self.s_f_conv2 = 3; # filter size of second convolution layer (default = 3)
+        self.n_f_conv2 = 36; # number of features of second convolution layer (default = 36)
+        self.s_f_conv3 = 3; # filter size of third convolution layer (default = 3)
+        self.n_f_conv3 = 36; # number of features of third convolution layer (default = 36)
+        self.n_n_fc1 = 576; # number of neurons of first fully connected layer (default = 576)
 
+    def create_graph(self):
 
+        # reset default graph
+        tf.reset_default_graph()
 
-    def create_graph(self,xsize=[None,28,28,1],ysize=[None,10]):
-        """
-        # alias  
-        """              
-        tp = tf.placeholder
-        tn = tf.nn                
-        tfsoftmax = tf.nn.softmax_cross_entropy_with_logits
-        tfAdam = tf.train.AdamOptimizer
-        self._graph['x_data'] = tp(dtype=tf.float32, shape=xsize, name='graph_x_data')
-        self._graph['y_data'] = tp(dtype=tf.float32, shape=ysize, name='graph_y_data')
-        # input : N,28,28,3
-        """
-        dnn = DNN()
-
-        # layer1 : N,14,14,16
-        x = dnn.conv2d(self.graph['x_data'], kernel=[3,3,1,16] ,strides=[1,1,1,1], padding='SAME', actu = 'relu', pooling = 'mapx', var_type = tf.float32 ,num=1)
-        # layer2 : N,14,14,32
-        x = dnn.conv2d(x, [3,3,16,32],[1,1,1,1], 'SAME','relu',None, var_type = tf.float32 ,num=2)
-
-        # layer3 : N,7,7,64
-        x = dnn.conv2d(x, [3,3,32,64],[1,1,1,1], 'SAME','relu','mapx', var_type = tf.float32 ,num=3)
-
-        # layer4 : N,7,7,64
-        x = dnn.conv2d(x, [1,1,64,32],[1,1,1,1], 'SAME','relu',None, var_type = tf.float32 ,num=4)
-
-        # layer5 : N,1,1,10
-        x = dnn.conv2d(x, [3,3,32,10],[1,1,1,1], 'SAME','relu','globalavg', var_type = tf.float32 ,num=5)
-        """
-        # output : N,1,1,10
-        
+        # variables for input and output 
+        self.x_data_tf = tf.placeholder(dtype=tf.float32, shape=[None,28,28,1], 
+                                        name='x_data_tf')
+        self.y_data_tf = tf.placeholder(dtype=tf.float32, shape=[None,10], name='y_data_tf')
 
         # 1.layer: convolution + max pooling
+        self.W_conv1_tf = weight_variable([self.s_f_conv1, self.s_f_conv1, 1,
+                                                self.n_f_conv1], 
+                                               name = 'W_conv1_tf') # (5,5,1,32)
+        self.b_conv1_tf = bias_variable([self.n_f_conv1], name = 'b_conv1_tf') # (32)
+        self.h_conv1_tf = tf.nn.relu(conv2d(self.x_data_tf, 
+                                                 self.W_conv1_tf) + self.b_conv1_tf,name= 'h_conv1_tf') # (.,28,28,32)
+        self.h_pool1_tf = max_pool_2x2(self.h_conv1_tf, 
+                                            name = 'h_pool1_tf') # (.,14,14,32)
 
-        
-        self.weights['w1'] = tf.Variable( tf.truncated_normal([3,3,1,16], stddev=0.1))
-        self.biases['b1'] = tf.Variable( tf.constant(0.1, shape=[16]))
-        x = tf.nn.conv2d(self._graph['x_data'], self.weights['w1'], strides=[1, 1, 1, 1], padding='SAME') + self.biases['b1']
-        x = tf.nn.relu(x)
-        x = tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1],padding='SAME')
+        # 2.layer: convolution + max pooling
+        self.W_conv2_tf = weight_variable([self.s_f_conv2, self.s_f_conv2, 
+                                                self.n_f_conv1, self.n_f_conv2], 
+                                               name = 'W_conv2_tf')
+        self.b_conv2_tf = bias_variable([self.n_f_conv2], name = 'b_conv2_tf')
+        self.h_conv2_tf = tf.nn.relu(conv2d(self.h_pool1_tf, 
+                                                 self.W_conv2_tf) + self.b_conv2_tf, 
+                                     name ='h_conv2_tf') #(.,14,14,32)
+        self.h_pool2_tf = max_pool_2x2(self.h_conv2_tf, name = 'h_pool2_tf') #(.,7,7,32)
 
-        self.weights['w2'] = tf.Variable( tf.truncated_normal([3,3,16,32], stddev=0.1))
-        self.biases['b2'] = tf.Variable( tf.constant(0.1, shape=[32]))
-        x = tf.nn.conv2d(x, self.weights['w2'], strides=[1, 1, 1, 1], padding='SAME') + self.biases['b2']
-        x = tf.nn.relu(x)
-        x = tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1],padding='SAME')
+        # 3.layer: convolution + max pooling
+        self.W_conv3_tf = weight_variable([self.s_f_conv3, self.s_f_conv3, 
+                                                self.n_f_conv2, self.n_f_conv3], 
+                                               name = 'W_conv3_tf')
+        self.b_conv3_tf = bias_variable([self.n_f_conv3], name = 'b_conv3_tf')
+        self.h_conv3_tf = tf.nn.relu(conv2d(self.h_pool2_tf, 
+                                                 self.W_conv3_tf) + self.b_conv3_tf, 
+                                     name = 'h_conv3_tf') #(.,7,7,32)
+        self.h_pool3_tf = max_pool_2x2(self.h_conv3_tf, 
+                                            name = 'h_pool3_tf') # (.,4,4,32)
 
-        self.weights['w3'] = tf.Variable( tf.truncated_normal([3,3,32,64], stddev=0.1))
-        self.biases['b3'] = tf.Variable( tf.constant(0.1, shape=[64]))
-        x = tf.nn.conv2d(x, self.weights['w3'], strides=[1, 1, 1, 1], padding='VALID') + self.biases['b3']
-        x = tf.nn.relu(x)
-        
-        self.weights['w4'] = tf.Variable( tf.truncated_normal([5*5*64,10], stddev=0.1))
-        self.biases['b4'] = tf.Variable( tf.constant(0.1, shape=[10]))
-        x = tf.reshape(x, [-1,5*5*64]) # (.,1024)
-        x = tf.nn.relu(tf.matmul(x,self.weights['w4']) + self.biases['b4'] ) # (.,1024)
-
-        #self._params['dropkr'] = tf.placeholder(dtype=tf.float32)
-        #x = tf.nn.dropout(x, self._params['dropkr'])
+        # 4.layer: fully connected
+        self.W_fc1_tf = weight_variable([4*4*self.n_f_conv3,self.n_n_fc1], 
+                                             name = 'W_fc1_tf') # (4*4*32, 1024)
+        self.b_fc1_tf = bias_variable([self.n_n_fc1], name = 'b_fc1_tf') # (1024)
+        self.h_pool3_flat_tf = tf.reshape(self.h_pool3_tf, [-1,4*4*self.n_f_conv3], 
+                                          name = 'h_pool3_flat_tf') # (.,1024)
+        self.h_fc1_tf = tf.nn.relu(tf.matmul(self.h_pool3_flat_tf, 
+                                             self.W_fc1_tf) + self.b_fc1_tf, 
+                                   name = 'h_fc1_tf') # (.,1024)
+      
+        # add dropout
+        self.keep_prob_tf = tf.placeholder(dtype=tf.float32, name = 'keep_prob_tf')
+        self.h_fc1_drop_tf = tf.nn.dropout(self.h_fc1_tf, self.keep_prob_tf, 
+                                           name = 'h_fc1_drop_tf')
 
         # 5.layer: fully connected
-        self.weights['w5'] = tf.Variable( tf.truncated_normal([10,10], stddev=0.1))
-        self.biases['b5'] = tf.Variable( tf.constant(0.1, shape=[10]))
-        x = tf.add(tf.matmul(x, self.weights['w5']),self.biases['b5'], name = 'z_pred_tf')# => (.,10)
-
-        self._graph['pred'] = x
+        self.W_fc2_tf = weight_variable([self.n_n_fc1, 10], name = 'W_fc2_tf')
+        self.b_fc2_tf = bias_variable([10], name = 'b_fc2_tf')
+        self.z_pred_tf = tf.add(tf.matmul(self.h_fc1_drop_tf, self.W_fc2_tf), 
+                                self.b_fc2_tf, name = 'z_pred_tf')# => (.,10)
 
         # cost function
-        self._graph['cost'] = self.cost(self._graph['y_data'],self._graph['pred'])
+        self.cross_entropy_tf = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
+            labels=self.y_data_tf, logits=self.z_pred_tf), name = 'cross_entropy_tf')
+     
+        # optimisation function
+        self.learn_rate_tf = tf.placeholder(dtype=tf.float32, name="learn_rate_tf")
+        self.train_step_tf = tf.train.AdamOptimizer(self.learn_rate_tf).minimize(
+            self.cross_entropy_tf, name = 'train_step_tf')
+
+        # predicted probabilities in one-hot encoding
+        self.y_pred_proba_tf = tf.nn.softmax(self.z_pred_tf, name='y_pred_proba_tf') 
         
-        self.optim_config(scene = 'cross_entropy')           
+        # tensor of correct predictions
+        self.y_pred_correct_tf = tf.equal(tf.argmax(self.y_pred_proba_tf, 1),
+                                          tf.argmax(self.y_data_tf, 1),
+                                          name = 'y_pred_correct_tf')  
+        
+        # accuracy 
+        self.accuracy_tf = tf.reduce_mean(tf.cast(self.y_pred_correct_tf, dtype=tf.float32),
+                                         name = 'accuracy_tf')
 
         # tensors to save intermediate accuracies and losses during training
-        self.create_log_acc_loss()
-                     
+        self.train_loss_tf = tf.Variable(np.array([]), dtype=tf.float32, 
+                                         name='train_loss_tf', validate_shape = False)
+        self.valid_loss_tf = tf.Variable(np.array([]), dtype=tf.float32, 
+                                         name='valid_loss_tf', validate_shape = False)
+        self.train_acc_tf = tf.Variable(np.array([]), dtype=tf.float32, 
+                                        name='train_acc_tf', validate_shape = False)
+        self.valid_acc_tf = tf.Variable(np.array([]), dtype=tf.float32, 
+                                        name='valid_acc_tf', validate_shape = False)
+     
         # number of weights and biases
-        num_weights, num_biases = self.weights_count()                
-
+        num_weights = (self.s_f_conv1**2*self.n_f_conv1 
+                       + self.s_f_conv2**2*self.n_f_conv1*self.n_f_conv2 
+                       + self.s_f_conv3**2*self.n_f_conv2*self.n_f_conv3 
+                       + 4*4*self.n_f_conv3*self.n_n_fc1 + self.n_n_fc1*10)
+        num_biases = self.n_f_conv1 + self.n_f_conv2 + self.n_f_conv3 + self.n_n_fc1
         print('num_weights =', num_weights)
         print('num_biases =', num_biases)
         
         return None  
-
-
-    def cost(self,y_data,pred):
-        cost_val =  tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
-            labels=y_data, logits=pred), name = 'cross_entropy')
-        return cost_val
-
-    def create_log_acc_loss(self):
-
-        self._graph['train_loss'] = tf.Variable(np.array([]), dtype=tf.float32, 
-                                                     name='graph_train_loss', validate_shape = False)
-        self._graph['valid_loss'] = tf.Variable(np.array([]), dtype=tf.float32, 
-                                             name='graph_valid_loss', validate_shape = False)
-        self._graph['train_acc'] = tf.Variable(np.array([]), dtype=tf.float32, 
-                                            name='graph_train_acc', validate_shape = False)
-        self._graph['valid_acc'] = tf.Variable(np.array([]), dtype=tf.float32, 
-                                            name='graph_valid_acc', validate_shape = False)
-    def optim_config(self,scene='cross_entropy'):
-            
-        tp = tf.placeholder
-        tn = tf.nn                
-        tfsoftmax = tf.nn.softmax_cross_entropy_with_logits
-        tfAdam = tf.train.AdamOptimizer
-
-        if scene == 'cross_entropy':                
-
-            # optimisation function
-            self._graph['lr_tf'] = tp(dtype=tf.float32)
-            self._graph['train_step'] = tfAdam(self._graph['lr_tf']).minimize(
-                    self._graph['cost'])
-
-            # predicted probabilities in one-hot encoding
-            self._graph['pred_prob'] = tn.softmax(self._graph['pred'], name='graph_pred_prob') 
-            
-            # tensor of correct predictions
-            self._graph['pred_correct'] = tf.equal(tf.argmax(self._graph['pred_prob'], 1),
-                tf.argmax(self._graph['y_data'], 1),
-                name = 'graph_pred_correct')  
-            
-            # accuracy 
-            self._graph['acc'] = tf.reduce_mean(tf.cast(self._graph['pred_correct'], dtype=tf.float32),
-                                             name = 'graph_accuracy')
+    
+    
 
 
